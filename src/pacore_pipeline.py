@@ -49,6 +49,7 @@ class PaCoRePipeline:
         self.tokenizer = AutoTokenizer.from_pretrained(config.model_name)
         # Decoder-only LMs should use left-padding for correct generation when batching.
         self.tokenizer.padding_side = "left"
+        self._has_chat_template = bool(getattr(self.tokenizer, "chat_template", None))
         self.model = AutoModelForCausalLM.from_pretrained(
             config.model_name,
             torch_dtype=model_dtype,
@@ -63,6 +64,16 @@ class PaCoRePipeline:
             device,
             self.tokenizer.pad_token_id,
         )
+
+    def _format_prompt(self, prompt: str) -> str:
+        # Instruct/chat models (Llama Instruct, Qwen Instruct, etc.) work much better
+        # when you use the model's chat template.
+        if self._has_chat_template and hasattr(self.tokenizer, "apply_chat_template"):
+            messages = [{"role": "user", "content": prompt}]
+            return self.tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True
+            )
+        return prompt
 
     @torch.no_grad()
     def _generate(
@@ -92,7 +103,7 @@ class PaCoRePipeline:
 
         outputs: List[str] = []
         for i in range(0, len(prompts), self.config.max_batch):
-            chunk = prompts[i : i + self.config.max_batch]
+            chunk = [self._format_prompt(p) for p in prompts[i : i + self.config.max_batch]]
             tokenized = self.tokenizer(chunk, return_tensors="pt", padding=True, truncation=True).to(
                 self.model.device
             )
