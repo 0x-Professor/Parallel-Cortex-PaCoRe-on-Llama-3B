@@ -6,6 +6,7 @@ that lead to a better final answer.
 """
 from __future__ import annotations
 
+import argparse
 from dataclasses import dataclass
 from typing import List, Dict, Any, Callable
 import json
@@ -151,13 +152,33 @@ class PaCoReTrainer:
 
 
 if __name__ == "__main__":
-    data_path = Path("data/math_train.jsonl")
+    parser = argparse.ArgumentParser(description="PaCoRe PPO trainer")
+    parser.add_argument("--dataset", default="data/math_train.jsonl", help="Path to JSONL with problem/answer")
+    parser.add_argument("--model", default="meta-llama/Llama-3.2-3B-Instruct", help="HF model name or path")
+    parser.add_argument("--output", default="models/pacore-3b", help="Where to save the trained model")
+    parser.add_argument("--branches", type=int, default=4)
+    parser.add_argument("--branch_tokens", type=int, default=160)
+    parser.add_argument("--compact_tokens", type=int, default=80)
+    parser.add_argument("--synth_tokens", type=int, default=160)
+    parser.add_argument("--temp_branch", type=float, default=0.7)
+    parser.add_argument("--temp_synth", type=float, default=0.35)
+    args = parser.parse_args()
+
+    data_path = Path(args.dataset)
     if not data_path.exists():
-        raise SystemExit("Dataset not found. Please create data/math_train.jsonl with problem/answer pairs.")
+        raise SystemExit(f"Dataset not found: {data_path}. Provide JSONL with problem/answer pairs.")
 
     dataset = load_jsonl_dataset(data_path)
-    trainer_cfg = TrainerConfig()
+    prompt_cfg = PaCoRePromptConfig(
+        branches=args.branches,
+        branch_tokens=args.branch_tokens,
+        compact_tokens=args.compact_tokens,
+        synthesis_tokens=args.synth_tokens,
+        temperature_branch=args.temp_branch,
+        temperature_synthesis=args.temp_synth,
+    )
+    trainer_cfg = TrainerConfig(model_name=args.model, prompt=prompt_cfg)
     reward = MathReward(RewardConfig())
     trainer = PaCoReTrainer(trainer_cfg, reward)
     trainer.train_epoch(dataset)
-    trainer.save(Path("models/pacore-3b"))
+    trainer.save(Path(args.output))
