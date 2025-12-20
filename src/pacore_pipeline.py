@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
+import os
 import re
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -35,6 +36,7 @@ class PaCoRePipelineConfig:
     model_name: str = "meta-llama/Llama-3.2-3B-Instruct"
     device: Optional[str] = None
     trust_remote_code: bool = False
+    hf_token: Optional[str] = None
     prompt: PaCoRePromptConfig = field(default_factory=PaCoRePromptConfig)
     max_batch: int = 8  # how many prompts to batch at once
 
@@ -47,9 +49,20 @@ class PaCoRePipeline:
         model_dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
         device = config.device or _default_device()
 
+        # Prefer an explicit token (config) and then fall back to environment variables.
+        # NOTE: `huggingface_hub.HfFolder.get_token()` only checks cached CLI logins; it
+        # does not reflect tokens injected via environment variables.
+        hf_token = (
+            (config.hf_token or "").strip() or
+            (os.environ.get("HUGGINGFACE_HUB_TOKEN") or "").strip() or
+            (os.environ.get("HF_TOKEN") or "").strip()
+        )
+        hf_token = hf_token or None
+
         self.tokenizer = AutoTokenizer.from_pretrained(
             config.model_name,
             trust_remote_code=config.trust_remote_code,
+            token=hf_token,
         )
         # Decoder-only LMs should use left-padding for correct generation when batching.
         self.tokenizer.padding_side = "left"
@@ -59,6 +72,7 @@ class PaCoRePipeline:
             torch_dtype=model_dtype,
             device_map="auto" if device != "cpu" else None,
             trust_remote_code=config.trust_remote_code,
+            token=hf_token,
         )
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token

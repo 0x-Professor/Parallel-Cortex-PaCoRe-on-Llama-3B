@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from loguru import logger
 from dotenv import load_dotenv
+import os
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
@@ -16,6 +17,10 @@ if str(ROOT) not in sys.path:
 # Preferred auth flow for gated models: run `hf auth login` so Transformers can
 # use the saved token automatically.
 load_dotenv(dotenv_path=ROOT / ".env", override=False)
+
+# Debug hint (does not print the token): verifies `.env` injection worked.
+_has_env_token = bool(os.environ.get("HUGGINGFACE_HUB_TOKEN") or os.environ.get("HF_TOKEN"))
+logger.info("HF token present in env: {}", _has_env_token)
 
 from src.pacore_pipeline import PaCoRePipeline, PaCoRePipelineConfig
 from src.pacore_prompts import PaCoRePromptConfig
