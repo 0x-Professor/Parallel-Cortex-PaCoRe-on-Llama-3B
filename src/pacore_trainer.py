@@ -44,7 +44,6 @@ class TrainerConfig:
             batch_size=2,
             mini_batch_size=1,
             gradient_accumulation_steps=1,
-            log_with=None,
         )
     )
     max_dataset: int = 32
