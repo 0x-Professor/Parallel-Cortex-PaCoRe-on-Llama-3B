@@ -6,10 +6,13 @@ import argparse
 import sys
 from pathlib import Path
 from loguru import logger
+from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+load_dotenv(ROOT / ".env")
 
 from src.pacore_pipeline import PaCoRePipeline, PaCoRePipelineConfig
 from src.pacore_prompts import PaCoRePromptConfig
