@@ -27,6 +27,7 @@ def build_branch_prompt(problem: str) -> str:
     return (
         "You are a careful reasoning assistant.\n"
         "Solve the problem step by step. Keep derivations explicit.\n"
+        "Do NOT write code. Do NOT include fenced code blocks.\n"
         f"Problem: {problem}\n\n"
         "End with a single line exactly like: FINAL_INTERMEDIATE_ANSWER: <best guess>"
     )
@@ -55,7 +56,7 @@ def build_synthesis_prompt(problem: str, notes: List[str]) -> str:
         "If uncertain, choose the most plausible answer.\n\n"
         f"Problem: {problem}\n\n"
         f"Notes:\n{formatted}\n\n"
-        "Write a single integrated solution.\n"
+        "Write a single integrated solution in plain text (no code).\n"
         "End with a single line exactly like: FINAL_ANSWER: <answer>"
     )
 
