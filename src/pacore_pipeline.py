@@ -6,8 +6,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
+import re
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.generation.stopping_criteria import StoppingCriteria, StoppingCriteriaList
 from loguru import logger
 
 from .pacore_prompts import (
@@ -63,8 +65,31 @@ class PaCoRePipeline:
         )
 
     @torch.no_grad()
-    def _generate(self, prompts: List[str], max_new_tokens: int, temperature: float) -> List[str]:
+    def _generate(
+        self,
+        prompts: List[str],
+        max_new_tokens: int,
+        temperature: float,
+        stop_regex: Optional[str] = None,
+    ) -> List[str]:
         """Batch generate responses for a list of prompts."""
+
+        class _StopOnCompletionRegex(StoppingCriteria):
+            def __init__(self, tokenizer, input_lengths, pattern: str):
+                self._tokenizer = tokenizer
+                self._input_lengths = input_lengths
+                self._pattern = pattern
+
+            def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:  # type: ignore[override]
+                # Stop when *any* sample matches; HF will stop the whole batch.
+                # We keep batches small (max_batch) so this is OK for demos.
+                for row, in_len in zip(input_ids, self._input_lengths.tolist()):
+                    completion_ids = row[int(in_len) :]
+                    text = self._tokenizer.decode(completion_ids, skip_special_tokens=True)
+                    if re.search(self._pattern, text, flags=re.IGNORECASE | re.DOTALL):
+                        return True
+                return False
+
         outputs: List[str] = []
         for i in range(0, len(prompts), self.config.max_batch):
             chunk = prompts[i : i + self.config.max_batch]
@@ -72,6 +97,13 @@ class PaCoRePipeline:
                 self.model.device
             )
             input_lengths = tokenized["attention_mask"].sum(dim=1)
+
+            stopping: Optional[StoppingCriteriaList] = None
+            if stop_regex:
+                stopping = StoppingCriteriaList([
+                    _StopOnCompletionRegex(self.tokenizer, input_lengths, stop_regex)
+                ])
+
             generated = self.model.generate(
                 **tokenized,
                 max_new_tokens=max_new_tokens,
@@ -80,6 +112,7 @@ class PaCoRePipeline:
                 top_p=self.config.prompt.top_p,
                 eos_token_id=self.tokenizer.eos_token_id,
                 pad_token_id=self.tokenizer.pad_token_id,
+                stopping_criteria=stopping,
             )
 
             # Decode only the generated completion (exclude the prompt), even with padding.
@@ -93,14 +126,24 @@ class PaCoRePipeline:
         cfg = self.config.prompt
 
         branch_prompts = [build_branch_prompt(problem) for _ in range(cfg.branches)]
-        branch_outputs = self._generate(branch_prompts, cfg.branch_tokens, cfg.temperature_branch)
+        branch_outputs = self._generate(
+            branch_prompts,
+            cfg.branch_tokens,
+            cfg.temperature_branch,
+            stop_regex=r"FINAL[\s_]*INTERMEDIATE[\s_]*ANSWER\s*:\s*\S",
+        )
         branch_answers = [parse_intermediate_answer(txt) for txt in branch_outputs]
 
         compact_prompts = [build_compaction_prompt(txt, cfg.compact_tokens) for txt in branch_outputs]
         compact_notes = self._generate(compact_prompts, cfg.compact_tokens, temperature=0.3)
 
         synth_prompt = build_synthesis_prompt(problem, compact_notes)
-        synth_output = self._generate([synth_prompt], cfg.synthesis_tokens, cfg.temperature_synthesis)[0]
+        synth_output = self._generate(
+            [synth_prompt],
+            cfg.synthesis_tokens,
+            cfg.temperature_synthesis,
+            stop_regex=r"FINAL[\s_]*ANSWER\s*:\s*\S",
+        )[0]
         final_answer = parse_final_answer(synth_output)
         if final_answer is None:
             # Fallback: return the trimmed synthesis output so callers always get something usable.
