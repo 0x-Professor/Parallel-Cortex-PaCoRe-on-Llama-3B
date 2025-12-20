@@ -7,7 +7,7 @@ that lead to a better final answer.
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Dict, Any, Callable
 import json
 from pathlib import Path
@@ -37,14 +37,15 @@ class RewardConfig:
 @dataclass
 class TrainerConfig:
     model_name: str = "meta-llama/Llama-3.2-3B-Instruct"
-    prompt: PaCoRePromptConfig = PaCoRePromptConfig()
-    ppo: PPOConfig = PPOConfig(
-        model_name="meta-llama/Llama-3.2-3B-Instruct",
-        learning_rate=1e-6,
-        batch_size=2,
-        mini_batch_size=1,
-        gradient_accumulation_steps=1,
-        log_with=None,
+    prompt: PaCoRePromptConfig = field(default_factory=PaCoRePromptConfig)
+    ppo: PPOConfig = field(
+        default_factory=lambda: PPOConfig(
+            learning_rate=1e-6,
+            batch_size=2,
+            mini_batch_size=1,
+            gradient_accumulation_steps=1,
+            log_with=None,
+        )
     )
     max_dataset: int = 32
 

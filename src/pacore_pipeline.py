@@ -45,6 +45,8 @@ class PaCoRePipeline:
         device = config.device or _default_device()
 
         self.tokenizer = AutoTokenizer.from_pretrained(config.model_name)
+        # Decoder-only LMs should use left-padding for correct generation when batching.
+        self.tokenizer.padding_side = "left"
         self.model = AutoModelForCausalLM.from_pretrained(
             config.model_name,
             torch_dtype=model_dtype,
