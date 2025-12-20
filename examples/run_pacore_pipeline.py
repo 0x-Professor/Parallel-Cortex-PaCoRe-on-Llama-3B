@@ -3,8 +3,13 @@ Run a PaCoRe-style inference pass with Llama-3.2-3B (or any HF causal LM).
 This showcases branch generation -> compaction -> synthesis on a toy problem.
 """
 import argparse
+import sys
 from pathlib import Path
 from loguru import logger
+
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from src.pacore_pipeline import PaCoRePipeline, PaCoRePipelineConfig
 from src.pacore_prompts import PaCoRePromptConfig
