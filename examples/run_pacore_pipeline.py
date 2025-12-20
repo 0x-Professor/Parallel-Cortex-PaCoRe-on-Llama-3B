@@ -25,6 +25,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run PaCoRe inference")
     parser.add_argument("problem", nargs="?", default="Prove that the sum of two even numbers is even.")
     parser.add_argument("--model", dest="model", default="meta-llama/Llama-3.2-3B-Instruct")
+    parser.add_argument(
+        "--trust_remote_code",
+        action="store_true",
+        help="Allow loading model code from the Hub (needed for some architectures).",
+    )
     parser.add_argument("--branches", type=int, default=4)
     parser.add_argument("--rounds", type=int, default=1)
     parser.add_argument("--branch_tokens", type=int, default=192)
@@ -42,7 +47,11 @@ def main():
         synthesis_tokens=args.synth_tokens,
         rounds=args.rounds,
     )
-    pipe_cfg = PaCoRePipelineConfig(model_name=args.model, prompt=prompt_cfg)
+    pipe_cfg = PaCoRePipelineConfig(
+        model_name=args.model,
+        prompt=prompt_cfg,
+        trust_remote_code=bool(args.trust_remote_code),
+    )
     pipeline = PaCoRePipeline(pipe_cfg)
 
     result = pipeline.run(args.problem)

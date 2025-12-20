@@ -34,6 +34,7 @@ def _default_device() -> str:
 class PaCoRePipelineConfig:
     model_name: str = "meta-llama/Llama-3.2-3B-Instruct"
     device: Optional[str] = None
+    trust_remote_code: bool = False
     prompt: PaCoRePromptConfig = field(default_factory=PaCoRePromptConfig)
     max_batch: int = 8  # how many prompts to batch at once
 
@@ -46,7 +47,10 @@ class PaCoRePipeline:
         model_dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
         device = config.device or _default_device()
 
-        self.tokenizer = AutoTokenizer.from_pretrained(config.model_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            config.model_name,
+            trust_remote_code=config.trust_remote_code,
+        )
         # Decoder-only LMs should use left-padding for correct generation when batching.
         self.tokenizer.padding_side = "left"
         self._has_chat_template = bool(getattr(self.tokenizer, "chat_template", None))
@@ -54,6 +58,7 @@ class PaCoRePipeline:
             config.model_name,
             torch_dtype=model_dtype,
             device_map="auto" if device != "cpu" else None,
+            trust_remote_code=config.trust_remote_code,
         )
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
