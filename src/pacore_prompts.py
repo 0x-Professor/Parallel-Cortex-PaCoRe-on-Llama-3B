@@ -28,7 +28,7 @@ def build_branch_prompt(problem: str) -> str:
         "You are a careful reasoning assistant.\n"
         "Solve the problem step by step. Keep derivations explicit.\n"
         f"Problem: {problem}\n\n"
-        "Write your reasoning and end with 'FINAL_INTERMEDIATE_ANSWER: <best guess>'."
+        "End with a single line exactly like: FINAL_INTERMEDIATE_ANSWER: <best guess>"
     )
 
 
@@ -55,16 +55,30 @@ def build_synthesis_prompt(problem: str, notes: List[str]) -> str:
         "If uncertain, choose the most plausible answer.\n\n"
         f"Problem: {problem}\n\n"
         f"Notes:\n{formatted}\n\n"
-        "Write a single integrated solution and end with 'FINAL_ANSWER: <answer>'."
+        "Write a single integrated solution.\n"
+        "End with a single line exactly like: FINAL_ANSWER: <answer>"
     )
 
 
-def parse_tagged_answer(text: str, tag: str) -> Optional[str]:
-    pattern = re.compile(re.escape(tag) + r"\s*(.*)", re.IGNORECASE)
-    match = pattern.search(text)
-    if not match:
+def _last_match_group(text: str, pattern: re.Pattern) -> Optional[str]:
+    matches = list(pattern.finditer(text))
+    if not matches:
         return None
-    return match.group(1).strip()
+    return matches[-1].group(1).strip()
+
+
+def parse_tagged_answer(text: str, tag: str) -> Optional[str]:
+    """Parse answers robustly.
+
+    Models sometimes emit minor variations like `FINAL ANSWER:` vs `FINAL_ANSWER:`.
+    This parser accepts spaces/underscores and returns the last occurrence.
+    """
+    tag_norm = tag.strip().rstrip(":")
+    tag_norm = re.escape(tag_norm)
+    # Allow spaces/underscores between words in the tag.
+    tag_pattern = tag_norm.replace("_", r"[\s_]*")
+    pattern = re.compile(tag_pattern + r"\s*:\s*(.+)", re.IGNORECASE)
+    return _last_match_group(text, pattern)
 
 
 def parse_final_answer(text: str) -> Optional[str]:

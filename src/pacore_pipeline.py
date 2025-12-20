@@ -71,16 +71,21 @@ class PaCoRePipeline:
             tokenized = self.tokenizer(chunk, return_tensors="pt", padding=True, truncation=True).to(
                 self.model.device
             )
+            input_lengths = tokenized["attention_mask"].sum(dim=1)
             generated = self.model.generate(
                 **tokenized,
                 max_new_tokens=max_new_tokens,
                 do_sample=True,
                 temperature=temperature,
                 top_p=self.config.prompt.top_p,
+                eos_token_id=self.tokenizer.eos_token_id,
                 pad_token_id=self.tokenizer.pad_token_id,
             )
-            decoded = self.tokenizer.batch_decode(generated, skip_special_tokens=True)
-            outputs.extend(decoded)
+
+            # Decode only the generated completion (exclude the prompt), even with padding.
+            for row, in_len in zip(generated, input_lengths.tolist()):
+                completion_ids = row[int(in_len) :]
+                outputs.append(self.tokenizer.decode(completion_ids, skip_special_tokens=True).strip())
         return outputs
 
     @torch.no_grad()
@@ -97,6 +102,9 @@ class PaCoRePipeline:
         synth_prompt = build_synthesis_prompt(problem, compact_notes)
         synth_output = self._generate([synth_prompt], cfg.synthesis_tokens, cfg.temperature_synthesis)[0]
         final_answer = parse_final_answer(synth_output)
+        if final_answer is None:
+            # Fallback: return the trimmed synthesis output so callers always get something usable.
+            final_answer = synth_output.strip() or None
 
         return {
             "problem": problem,

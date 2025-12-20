@@ -46,16 +46,32 @@ python src/master.py --config config.yaml
 # Start worker nodes
 python src/worker.py --node-id 1 --master-host localhost:5000
 
-# Run PaCoRe inference demo (Llama-3.2-3B)
+# Run PaCoRe inference demo (defaults to a Llama-3B repo id)
 python examples/run_pacore_pipeline.py "Prove that the sum of two even numbers is even."
+
+# If your Llama-3B repo is gated / you don't have access yet, use an open model:
+python examples/run_pacore_pipeline.py "Solve: 23*17" --model microsoft/phi-2
 
 # Train PaCoRe with PPO on tiny math set
 python -m src.pacore_trainer
+```
 
-Windows / Python 3.13 note: `ray` has no wheel for this combo. You can either
+### Using Llama 3B (Hugging Face)
+
+Many Meta Llama repos on the Hugging Face Hub are **gated**. If you see `401`/`403` when downloading:
+
+- Request/accept access on the model page in your browser.
+- Authenticate locally (recommended): `hf auth login`
+- Re-run the demo.
+
+This project also supports a local, git-ignored `.env` file for convenience; keep it local and never commit tokens.
+
+### Windows / Python 3.13 note
+
+`ray` has no wheel for this combo. You can either:
+
 - skip `ray` (not required for the PaCoRe demo/trainer), or
 - use WSL/conda with Python 3.10–3.11 to enable `ray` if you need distributed execution.
-```
 
 ## Project Structure
 ```
