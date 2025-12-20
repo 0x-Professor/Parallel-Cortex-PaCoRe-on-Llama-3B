@@ -12,7 +12,10 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-load_dotenv(ROOT / ".env")
+# Load a local .env if present (git-ignored). Do not override existing env vars.
+# Preferred auth flow for gated models: run `hf auth login` so Transformers can
+# use the saved token automatically.
+load_dotenv(dotenv_path=ROOT / ".env", override=False)
 
 from src.pacore_pipeline import PaCoRePipeline, PaCoRePipelineConfig
 from src.pacore_prompts import PaCoRePromptConfig

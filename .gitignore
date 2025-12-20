@@ -61,4 +61,5 @@ ray_results/
 
 # Environment
 .env
+.env.*
 .env.local
