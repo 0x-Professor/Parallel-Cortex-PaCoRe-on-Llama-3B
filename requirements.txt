@@ -9,8 +9,9 @@ huggingface-hub>=0.20.0
 sentencepiece>=0.1.99
 
 # Distributed Computing
+# Note: ray has no Windows Python 3.13 wheel. Skip on that platform or install via WSL/conda with Python 3.10–3.11.
 mpi4py>=3.1.4
-ray>=2.5.0
+ray>=2.5.0; python_version < "3.12" and platform_system != "Windows"
 
 # Communication
 grpcio>=1.54.0

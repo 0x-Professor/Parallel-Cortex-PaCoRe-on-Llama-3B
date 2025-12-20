@@ -51,6 +51,10 @@ python examples/run_pacore_pipeline.py "Prove that the sum of two even numbers i
 
 # Train PaCoRe with PPO on tiny math set
 python -m src.pacore_trainer
+
+Windows / Python 3.13 note: `ray` has no wheel for this combo. You can either
+- skip `ray` (not required for the PaCoRe demo/trainer), or
+- use WSL/conda with Python 3.10–3.11 to enable `ray` if you need distributed execution.
 ```
 
 ## Project Structure
