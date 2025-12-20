@@ -1,0 +1,56 @@
+"""
+Run a PaCoRe-style inference pass with Llama-3.2-3B (or any HF causal LM).
+This showcases branch generation -> compaction -> synthesis on a toy problem.
+"""
+import argparse
+from pathlib import Path
+from loguru import logger
+
+from src.pacore_pipeline import PaCoRePipeline, PaCoRePipelineConfig
+from src.pacore_prompts import PaCoRePromptConfig
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run PaCoRe inference")
+    parser.add_argument("problem", nargs="?", default="Prove that the sum of two even numbers is even.")
+    parser.add_argument("--model", dest="model", default="meta-llama/Llama-3.2-3B-Instruct")
+    parser.add_argument("--branches", type=int, default=4)
+    parser.add_argument("--rounds", type=int, default=1)
+    parser.add_argument("--branch_tokens", type=int, default=192)
+    parser.add_argument("--compact_tokens", type=int, default=96)
+    parser.add_argument("--synth_tokens", type=int, default=192)
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+    prompt_cfg = PaCoRePromptConfig(
+        branches=args.branches,
+        branch_tokens=args.branch_tokens,
+        compact_tokens=args.compact_tokens,
+        synthesis_tokens=args.synth_tokens,
+        rounds=args.rounds,
+    )
+    pipe_cfg = PaCoRePipelineConfig(model_name=args.model, prompt=prompt_cfg)
+    pipeline = PaCoRePipeline(pipe_cfg)
+
+    result = pipeline.run(args.problem)
+
+    print("=" * 80)
+    print("PaCoRe Inference Demo")
+    print("=" * 80)
+    print(f"Problem: {args.problem}\n")
+
+    for i, (trace, note) in enumerate(zip(result["branches"], result["compact_notes"]), 1):
+        print(f"--- Branch {i} ---")
+        print(trace[:600])
+        print("\nCompact note:")
+        print(note)
+        print("-" * 40)
+
+    print("SYNTHESIS OUTPUT:\n", result["synthesis"])
+    print("\nFINAL ANSWER:", result["final_answer"])
+
+
+if __name__ == "__main__":
+    main()

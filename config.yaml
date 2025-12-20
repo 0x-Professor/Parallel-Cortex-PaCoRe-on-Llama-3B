@@ -1,0 +1,40 @@
+# PaCoRe Configuration
+
+master:
+  host: "0.0.0.0"
+  port: 5000
+  max_workers: 4
+  timeout: 300
+
+worker:
+  model_name: "microsoft/phi-2"  # Small efficient model
+  batch_size: 8
+  max_length: 512
+  device: "cuda"  # or "cpu"
+
+consensus:
+  strategy: "weighted_voting"  # Options: majority_voting, weighted_voting, ensemble
+  confidence_threshold: 0.7
+  min_agreement: 0.6
+
+models:
+  pool:
+    - name: "phi-2"
+      path: "microsoft/phi-2"
+      weight: 1.0
+    - name: "tinyllama"
+      path: "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+      weight: 0.8
+    - name: "opt-1.3b"
+      path: "facebook/opt-1.3b"
+      weight: 0.9
+
+parallel:
+  backend: "ray"  # Options: mpi, ray, grpc
+  num_replicas: 3
+  load_balancing: true
+
+logging:
+  level: "INFO"
+  format: "{time} | {level} | {message}"
+  file: "logs/pacore.log"
