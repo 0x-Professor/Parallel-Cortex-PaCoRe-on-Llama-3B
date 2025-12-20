@@ -4,7 +4,7 @@ This uses a single HF causal LM (e.g., Llama-3.2-3B) with role prompts.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -32,7 +32,7 @@ def _default_device() -> str:
 class PaCoRePipelineConfig:
     model_name: str = "meta-llama/Llama-3.2-3B-Instruct"
     device: Optional[str] = None
-    prompt: PaCoRePromptConfig = PaCoRePromptConfig()
+    prompt: PaCoRePromptConfig = field(default_factory=PaCoRePromptConfig)
     max_batch: int = 8  # how many prompts to batch at once
 
 
