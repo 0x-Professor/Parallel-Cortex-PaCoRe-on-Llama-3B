@@ -23,16 +23,30 @@ class PaCoRePromptConfig:
     rounds: int = 1
 
 
-def build_branch_prompt(problem: str) -> str:
+def build_branch_prompt(problem: str, round_num: int = 1, prior_answer: Optional[str] = None) -> str:
+    """Build a branch prompt with optional multi-round context."""
+    prior_block = ""
+    if prior_answer is not None and round_num > 1:
+        prior_block = (
+            f"\nYour previous answer was: {prior_answer}\n"
+            "Double-check it. If correct, confirm. If wrong, fix it.\n"
+        )
     return (
-        "You are a careful reasoning assistant.\n"
-        "Answer concisely and follow the required tag format.\n"
+        "You are an expert problem solver with exceptional reasoning skills.\n"
+        "Think step by step. Break the problem into parts. Show your work.\n"
         "Do NOT write code. Do NOT use fenced code blocks.\n\n"
-        f"Problem: {problem}\n\n"
-        "IMPORTANT: Put the answer tag FIRST so it is not lost if output is truncated.\n"
-        "Line 1 must be exactly: FINAL_INTERMEDIATE_ANSWER: <answer>\n"
-        "Then give 1-4 short lines of reasoning.\n"
-        "Finally, repeat the same tag on the last line exactly: FINAL_INTERMEDIATE_ANSWER: <answer>"
+        f"Problem: {problem}\n"
+        f"{prior_block}\n"
+        "INSTRUCTIONS:\n"
+        "1. First, understand what the problem is asking.\n"
+        "2. Identify the key information and constraints.\n"
+        "3. Choose an appropriate method/formula.\n"
+        "4. Execute step by step, showing calculations.\n"
+        "5. Verify your answer makes sense.\n\n"
+        "FORMAT: Put the answer tag FIRST (in case output is truncated).\n"
+        "Line 1: FINAL_INTERMEDIATE_ANSWER: <answer>\n"
+        "Then 2-6 lines of step-by-step reasoning.\n"
+        "Last line: FINAL_INTERMEDIATE_ANSWER: <answer>"
     )
 
 
@@ -53,22 +67,42 @@ def build_synthesis_prompt(problem: str, notes: List[str], candidate_answer: Opt
     candidate_block = ""
     if candidate_answer is not None and str(candidate_answer).strip():
         candidate_block = (
-            "\nCandidate answer from branches (verify quickly): "
-            f"{str(candidate_answer).strip()}\n"
+            f"\nCandidate answer (verify carefully): {str(candidate_answer).strip()}\n"
         )
     return (
-        "You are an expert solver.\n"
-        "Use the notes ONLY as internal guidance. Do NOT mention the notes or the protocol.\n"
-        "Be direct and concise.\n\n"
+        "You are an expert problem solver and verifier.\n"
+        "Multiple reasoning attempts have been made. Your job is to:\n"
+        "1. Cross-check the candidate answers for correctness.\n"
+        "2. Identify any errors in reasoning.\n"
+        "3. Produce the CORRECT final answer.\n\n"
         f"Problem: {problem}\n\n"
-        f"Notes:\n{formatted}\n"
+        f"Reasoning attempts:\n{formatted}\n"
         f"{candidate_block}\n"
-        "If any note contains a line like 'FINAL_INTERMEDIATE_ANSWER: ...', treat it as a strong candidate.\n"
-        "If multiple candidates agree, prefer that agreed answer.\n\n"
-        "IMPORTANT: Put the answer tag FIRST so it is not lost if output is truncated.\n"
-        "Line 1 must be exactly: FINAL_ANSWER: <answer>\n"
-        "Then give a brief justification (1-5 short lines).\n"
-        "Finally, repeat the same tag on the last line exactly: FINAL_ANSWER: <answer>"
+        "VERIFICATION STEPS:\n"
+        "- If answers agree, verify by re-solving quickly.\n"
+        "- If answers disagree, identify which reasoning is correct.\n"
+        "- Check for arithmetic errors, sign errors, or misunderstandings.\n\n"
+        "FORMAT: Put the answer tag FIRST (in case output is truncated).\n"
+        "Line 1: FINAL_ANSWER: <answer>\n"
+        "Then 2-5 lines of verification/justification.\n"
+        "Last line: FINAL_ANSWER: <answer>"
+    )
+
+
+def build_verification_prompt(problem: str, proposed_answer: str) -> str:
+    """Build a prompt for verifying/double-checking an answer."""
+    return (
+        "You are a careful verifier. Check if the proposed answer is correct.\n\n"
+        f"Problem: {problem}\n"
+        f"Proposed answer: {proposed_answer}\n\n"
+        "TASK:\n"
+        "1. Re-solve the problem independently using a different method if possible.\n"
+        "2. Compare your result with the proposed answer.\n"
+        "3. If they match, confirm. If not, provide the correct answer.\n\n"
+        "FORMAT:\n"
+        "Line 1: FINAL_ANSWER: <answer>\n"
+        "Then 2-4 lines explaining your verification.\n"
+        "Last line: FINAL_ANSWER: <answer>"
     )
 
 
