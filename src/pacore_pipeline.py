@@ -108,6 +108,12 @@ class PaCoRePipeline:
             trust_remote_code=config.trust_remote_code,
             token=hf_token,
         )
+        # For greedy decoding (temperature=0), Transformers may warn that `top_p` is unused
+        # if it is set in the model's generation config. Reset to the default.
+        try:
+            self.model.generation_config.top_p = 1.0
+        except Exception:
+            pass
         if device in {"cpu", "mps"}:
             self.model.to(device)
         if self.tokenizer.pad_token is None:
