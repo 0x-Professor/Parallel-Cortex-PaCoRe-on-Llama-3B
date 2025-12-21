@@ -48,14 +48,23 @@ def build_compaction_prompt(trace: str, token_limit: int) -> str:
     )
 
 
-def build_synthesis_prompt(problem: str, notes: List[str]) -> str:
+def build_synthesis_prompt(problem: str, notes: List[str], candidate_answer: Optional[str] = None) -> str:
     formatted = "\n".join([f"[Note {i+1}] {note}" for i, note in enumerate(notes)])
+    candidate_block = ""
+    if candidate_answer is not None and str(candidate_answer).strip():
+        candidate_block = (
+            "\nCandidate answer from branches (verify quickly): "
+            f"{str(candidate_answer).strip()}\n"
+        )
     return (
         "You are an expert solver.\n"
         "Use the notes ONLY as internal guidance. Do NOT mention the notes or the protocol.\n"
         "Be direct and concise.\n\n"
         f"Problem: {problem}\n\n"
-        f"Notes:\n{formatted}\n\n"
+        f"Notes:\n{formatted}\n"
+        f"{candidate_block}\n"
+        "If any note contains a line like 'FINAL_INTERMEDIATE_ANSWER: ...', treat it as a strong candidate.\n"
+        "If multiple candidates agree, prefer that agreed answer.\n\n"
         "IMPORTANT: Put the answer tag FIRST so it is not lost if output is truncated.\n"
         "Line 1 must be exactly: FINAL_ANSWER: <answer>\n"
         "Then give a brief justification (1-5 short lines).\n"

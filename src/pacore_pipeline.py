@@ -172,15 +172,20 @@ class PaCoRePipeline:
 
             do_sample = temperature is not None and float(temperature) > 0.0
 
-            generated = self.model.generate(
+            generate_kwargs = {
                 **tokenized,
-                max_new_tokens=max_new_tokens,
-                do_sample=do_sample,
-                temperature=(float(temperature) if do_sample else None),
-                top_p=self.config.prompt.top_p,
-                eos_token_id=self.tokenizer.eos_token_id,
-                pad_token_id=self.tokenizer.pad_token_id,
-                stopping_criteria=stopping,
+                "max_new_tokens": max_new_tokens,
+                "do_sample": do_sample,
+                "temperature": (float(temperature) if do_sample else None),
+                "eos_token_id": self.tokenizer.eos_token_id,
+                "pad_token_id": self.tokenizer.pad_token_id,
+                "stopping_criteria": stopping,
+            }
+            if do_sample:
+                generate_kwargs["top_p"] = self.config.prompt.top_p
+
+            generated = self.model.generate(
+                **generate_kwargs,
             )
 
             # Decode only the generated completion (exclude the prompt), even with padding.
@@ -205,12 +210,37 @@ class PaCoRePipeline:
         )
         branch_answers = [parse_intermediate_answer(txt) for txt in branch_outputs]
 
-        # Always run compaction + synthesis so callers get a clean, tagged FINAL_ANSWER.
-        # This avoids failures when a branch gets truncated before emitting the tag.
-        compact_prompts = [build_compaction_prompt(txt, cfg.compact_tokens) for txt in branch_outputs]
-        compact_notes = self._generate(compact_prompts, cfg.compact_tokens, temperature=0.3)
+        # If we have tagged intermediate answers, compute a simple consensus.
+        non_empty_branch_answers = [a for a in branch_answers if a is not None and str(a).strip()]
+        consensus_answer: Optional[str] = None
+        if non_empty_branch_answers:
+            counts: Dict[str, int] = {}
+            for a in non_empty_branch_answers:
+                key = str(a).strip()
+                counts[key] = counts.get(key, 0) + 1
+            consensus_answer = max(counts.items(), key=lambda kv: kv[1])[0]
 
-        synth_prompt = build_synthesis_prompt(problem, compact_notes)
+        # Build compact notes. When possible, do it deterministically using the tagged
+        # intermediate answer so small token budgets don't drop the key result.
+        compact_notes: List[str] = []
+        missing_compaction_indices: List[int] = []
+        for idx, (trace, ans) in enumerate(zip(branch_outputs, branch_answers)):
+            if ans is not None and str(ans).strip():
+                compact_notes.append(f"FINAL_INTERMEDIATE_ANSWER: {str(ans).strip()}")
+            else:
+                compact_notes.append("")
+                missing_compaction_indices.append(idx)
+
+        if missing_compaction_indices:
+            compact_prompts = [
+                build_compaction_prompt(branch_outputs[i], cfg.compact_tokens)
+                for i in missing_compaction_indices
+            ]
+            generated_notes = self._generate(compact_prompts, cfg.compact_tokens, temperature=0.3)
+            for i, note in zip(missing_compaction_indices, generated_notes):
+                compact_notes[i] = note
+
+        synth_prompt = build_synthesis_prompt(problem, compact_notes, candidate_answer=consensus_answer)
         synth_output = self._generate(
             [synth_prompt],
             cfg.synthesis_tokens,
@@ -219,11 +249,11 @@ class PaCoRePipeline:
         )[0]
 
         final_answer = parse_final_answer(synth_output)
+        # Prefer the branch consensus if synthesis is missing/truncated or disagrees.
+        if consensus_answer is not None:
+            if final_answer is None or str(final_answer).strip() != str(consensus_answer).strip():
+                final_answer = consensus_answer
         if final_answer is None:
-            # Secondary fallback: if synthesis missed the tag, use the best tagged branch answer.
-            final_answer = next((a for a in branch_answers if a), None)
-        if final_answer is None:
-            # Last resort: return trimmed synthesis so callers always get something usable.
             final_answer = synth_output.strip() or None
 
         return {
