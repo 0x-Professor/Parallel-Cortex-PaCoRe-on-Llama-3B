@@ -26,10 +26,13 @@ class PaCoRePromptConfig:
 def build_branch_prompt(problem: str) -> str:
     return (
         "You are a careful reasoning assistant.\n"
-        "Solve the problem step by step. Keep derivations explicit.\n"
-        "Do NOT write code. Do NOT include fenced code blocks.\n"
+        "Answer concisely and follow the required tag format.\n"
+        "Do NOT write code. Do NOT use fenced code blocks.\n\n"
         f"Problem: {problem}\n\n"
-        "End with a single line exactly like: FINAL_INTERMEDIATE_ANSWER: <best guess>"
+        "IMPORTANT: Put the answer tag FIRST so it is not lost if output is truncated.\n"
+        "Line 1 must be exactly: FINAL_INTERMEDIATE_ANSWER: <answer>\n"
+        "Then give 1-4 short lines of reasoning.\n"
+        "Finally, repeat the same tag on the last line exactly: FINAL_INTERMEDIATE_ANSWER: <answer>"
     )
 
 
@@ -48,16 +51,15 @@ def build_compaction_prompt(trace: str, token_limit: int) -> str:
 def build_synthesis_prompt(problem: str, notes: List[str]) -> str:
     formatted = "\n".join([f"[Note {i+1}] {note}" for i, note in enumerate(notes)])
     return (
-        "You are an expert synthesizer.\n"
-        "Given partial solution notes (some may be wrong), do:\n"
-        "1) Cross-check and spot contradictions or mistakes.\n"
-        "2) Combine correct ideas into one coherent plan.\n"
-        "3) Produce a final, justified solution.\n"
-        "If uncertain, choose the most plausible answer.\n\n"
+        "You are an expert solver.\n"
+        "Use the notes ONLY as internal guidance. Do NOT mention the notes or the protocol.\n"
+        "Be direct and concise.\n\n"
         f"Problem: {problem}\n\n"
         f"Notes:\n{formatted}\n\n"
-        "Write a single integrated solution in plain text (no code).\n"
-        "End with a single line exactly like: FINAL_ANSWER: <answer>"
+        "IMPORTANT: Put the answer tag FIRST so it is not lost if output is truncated.\n"
+        "Line 1 must be exactly: FINAL_ANSWER: <answer>\n"
+        "Then give a brief justification (1-5 short lines).\n"
+        "Finally, repeat the same tag on the last line exactly: FINAL_ANSWER: <answer>"
     )
 
 

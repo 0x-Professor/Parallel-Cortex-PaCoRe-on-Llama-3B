@@ -77,11 +77,14 @@ def main():
     print("=" * 80)
     print(f"Problem: {args.problem}\n")
 
-    for i, (trace, note) in enumerate(zip(result["branches"], result["compact_notes"]), 1):
+    branches = result.get("branches") or []
+    compact_notes = result.get("compact_notes") or []
+    for i, trace in enumerate(branches, 1):
         print(f"--- Branch {i} ---")
-        print(trace[:600])
-        print("\nCompact note:")
-        print(note)
+        print((trace or "")[:600])
+        if i - 1 < len(compact_notes):
+            print("\nCompact note:")
+            print(compact_notes[i - 1])
         print("-" * 40)
 
     print("SYNTHESIS OUTPUT:\n", result["synthesis"])

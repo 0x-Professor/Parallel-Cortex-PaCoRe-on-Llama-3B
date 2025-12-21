@@ -90,9 +90,20 @@ class PaCoRePipeline:
         # Decoder-only LMs should use left-padding for correct generation when batching.
         self.tokenizer.padding_side = "left"
         self._has_chat_template = bool(getattr(self.tokenizer, "chat_template", None))
-        self.model = AutoModelForCausalLM.from_pretrained(
-            config.model_name,
-            torch_dtype=model_dtype,
+        # Newer Transformers prefers `dtype=`; older versions used `torch_dtype=`.
+        # Use a small compatibility shim so users don't see deprecation warnings.
+        def _from_pretrained_with_dtype(**kwargs):
+            try:
+                return AutoModelForCausalLM.from_pretrained(**kwargs)
+            except TypeError:
+                dtype = kwargs.pop("dtype", None)
+                if dtype is not None:
+                    kwargs["torch_dtype"] = dtype
+                return AutoModelForCausalLM.from_pretrained(**kwargs)
+
+        self.model = _from_pretrained_with_dtype(
+            pretrained_model_name_or_path=config.model_name,
+            dtype=model_dtype,
             device_map="auto" if device == "cuda" else None,
             trust_remote_code=config.trust_remote_code,
             token=hf_token,
@@ -194,22 +205,8 @@ class PaCoRePipeline:
         )
         branch_answers = [parse_intermediate_answer(txt) for txt in branch_outputs]
 
-        # Fast path: with a single branch, compaction + synthesis adds latency without
-        # improving quality in most demo cases. Return the branch's tagged answer.
-        if cfg.branches == 1:
-            final_answer = branch_answers[0] or parse_final_answer(branch_outputs[0])
-            synthesis = branch_outputs[0]
-            if final_answer is None:
-                final_answer = synthesis.strip() or None
-            return {
-                "problem": problem,
-                "branches": branch_outputs,
-                "branch_answers": branch_answers,
-                "compact_notes": [],
-                "synthesis": synthesis,
-                "final_answer": final_answer,
-            }
-
+        # Always run compaction + synthesis so callers get a clean, tagged FINAL_ANSWER.
+        # This avoids failures when a branch gets truncated before emitting the tag.
         compact_prompts = [build_compaction_prompt(txt, cfg.compact_tokens) for txt in branch_outputs]
         compact_notes = self._generate(compact_prompts, cfg.compact_tokens, temperature=0.3)
 
@@ -220,9 +217,13 @@ class PaCoRePipeline:
             cfg.temperature_synthesis,
             stop_regex=r"FINAL[\s_]*ANSWER\s*:\s*\S",
         )[0]
+
         final_answer = parse_final_answer(synth_output)
         if final_answer is None:
-            # Fallback: return the trimmed synthesis output so callers always get something usable.
+            # Secondary fallback: if synthesis missed the tag, use the best tagged branch answer.
+            final_answer = next((a for a in branch_answers if a), None)
+        if final_answer is None:
+            # Last resort: return trimmed synthesis so callers always get something usable.
             final_answer = synth_output.strip() or None
 
         return {

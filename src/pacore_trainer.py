@@ -79,11 +79,19 @@ class PaCoReTrainer:
     def __init__(self, cfg: TrainerConfig, reward_fn: Callable[[str, str], float]):
         self.cfg = cfg
         self.tokenizer = AutoTokenizer.from_pretrained(cfg.model_name)
-        self.model = AutoModelForCausalLM.from_pretrained(
-            cfg.model_name,
-            torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
-            device_map="auto" if torch.cuda.is_available() else None,
-        )
+        model_dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
+        try:
+            self.model = AutoModelForCausalLM.from_pretrained(
+                cfg.model_name,
+                dtype=model_dtype,
+                device_map="auto" if torch.cuda.is_available() else None,
+            )
+        except TypeError:
+            self.model = AutoModelForCausalLM.from_pretrained(
+                cfg.model_name,
+                torch_dtype=model_dtype,
+                device_map="auto" if torch.cuda.is_available() else None,
+            )
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
         self.ppo_trainer = PPOTrainer(cfg.ppo, self.model, self.tokenizer)
