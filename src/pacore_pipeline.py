@@ -255,71 +255,90 @@ class PaCoRePipeline:
         """Single run of PaCoRe with optional multi-round refinement."""
         cfg = self.config.prompt
         prior_answer: Optional[str] = None
+        all_round_data: List[Dict[str, Any]] = []
         
         for round_num in range(1, num_rounds + 1):
             branch_prompts = [
                 build_branch_prompt(problem, round_num=round_num, prior_answer=prior_answer)
                 for _ in range(cfg.branches)
             ]
-        branch_outputs = self._generate(
-            branch_prompts,
-            cfg.branch_tokens,
-            cfg.temperature_branch,
-            stop_regex=r"FINAL[\s_]*INTERMEDIATE[\s_]*ANSWER\s*:\s*\S",
-        )
-        branch_answers = [parse_intermediate_answer(txt) for txt in branch_outputs]
+            branch_outputs = self._generate(
+                branch_prompts,
+                cfg.branch_tokens,
+                cfg.temperature_branch,
+                stop_regex=r"FINAL[\s_]*INTERMEDIATE[\s_]*ANSWER\s*:\s*\S",
+            )
+            branch_answers = [parse_intermediate_answer(txt) for txt in branch_outputs]
 
-        # If we have tagged intermediate answers, compute a simple consensus.
-        non_empty_branch_answers = [a for a in branch_answers if a is not None and str(a).strip()]
-        consensus_answer: Optional[str] = None
-        if non_empty_branch_answers:
-            counts: Dict[str, int] = {}
-            for a in non_empty_branch_answers:
-                key = str(a).strip()
-                counts[key] = counts.get(key, 0) + 1
-            consensus_answer = max(counts.items(), key=lambda kv: kv[1])[0]
+            # If we have tagged intermediate answers, compute a simple consensus.
+            non_empty_branch_answers = [a for a in branch_answers if a is not None and str(a).strip()]
+            consensus_answer: Optional[str] = None
+            if non_empty_branch_answers:
+                counts: Dict[str, int] = {}
+                for a in non_empty_branch_answers:
+                    key = str(a).strip()
+                    counts[key] = counts.get(key, 0) + 1
+                consensus_answer = max(counts.items(), key=lambda kv: kv[1])[0]
 
-        # Build compact notes. When possible, do it deterministically using the tagged
-        # intermediate answer so small token budgets don't drop the key result.
-        compact_notes: List[str] = []
-        missing_compaction_indices: List[int] = []
-        for idx, (trace, ans) in enumerate(zip(branch_outputs, branch_answers)):
-            if ans is not None and str(ans).strip():
-                compact_notes.append(f"FINAL_INTERMEDIATE_ANSWER: {str(ans).strip()}")
-            else:
-                compact_notes.append("")
-                missing_compaction_indices.append(idx)
+            # Build compact notes. When possible, do it deterministically using the tagged
+            # intermediate answer so small token budgets don't drop the key result.
+            compact_notes: List[str] = []
+            missing_compaction_indices: List[int] = []
+            for idx, (trace, ans) in enumerate(zip(branch_outputs, branch_answers)):
+                if ans is not None and str(ans).strip():
+                    compact_notes.append(f"FINAL_INTERMEDIATE_ANSWER: {str(ans).strip()}")
+                else:
+                    compact_notes.append("")
+                    missing_compaction_indices.append(idx)
 
-        if missing_compaction_indices:
-            compact_prompts = [
-                build_compaction_prompt(branch_outputs[i], cfg.compact_tokens)
-                for i in missing_compaction_indices
-            ]
-            generated_notes = self._generate(compact_prompts, cfg.compact_tokens, temperature=0.3)
-            for i, note in zip(missing_compaction_indices, generated_notes):
-                compact_notes[i] = note
+            if missing_compaction_indices:
+                compact_prompts = [
+                    build_compaction_prompt(branch_outputs[i], cfg.compact_tokens)
+                    for i in missing_compaction_indices
+                ]
+                generated_notes = self._generate(compact_prompts, cfg.compact_tokens, temperature=0.3)
+                for i, note in zip(missing_compaction_indices, generated_notes):
+                    compact_notes[i] = note
 
-        synth_prompt = build_synthesis_prompt(problem, compact_notes, candidate_answer=consensus_answer)
-        synth_output = self._generate(
-            [synth_prompt],
-            cfg.synthesis_tokens,
-            cfg.temperature_synthesis,
-            stop_regex=r"FINAL[\s_]*ANSWER\s*:\s*\S",
-        )[0]
+            synth_prompt = build_synthesis_prompt(problem, compact_notes, candidate_answer=consensus_answer)
+            synth_output = self._generate(
+                [synth_prompt],
+                cfg.synthesis_tokens,
+                cfg.temperature_synthesis,
+                stop_regex=r"FINAL[\s_]*ANSWER\s*:\s*\S",
+            )[0]
 
-        final_answer = parse_final_answer(synth_output)
-        # Prefer the branch consensus if synthesis is missing/truncated or disagrees.
-        if consensus_answer is not None:
-            if final_answer is None or str(final_answer).strip() != str(consensus_answer).strip():
-                final_answer = consensus_answer
-        if final_answer is None:
-            final_answer = synth_output.strip() or None
+            final_answer = parse_final_answer(synth_output)
+            # Prefer the branch consensus if synthesis is missing/truncated or disagrees.
+            if consensus_answer is not None:
+                if final_answer is None or str(final_answer).strip() != str(consensus_answer).strip():
+                    final_answer = consensus_answer
+            if final_answer is None:
+                final_answer = synth_output.strip() or None
+            
+            # Store round data
+            all_round_data.append({
+                "round": round_num,
+                "branches": branch_outputs,
+                "branch_answers": branch_answers,
+                "compact_notes": compact_notes,
+                "synthesis": synth_output,
+                "consensus_answer": consensus_answer,
+                "final_answer": final_answer,
+            })
+            
+            # Update prior_answer for next round
+            prior_answer = str(final_answer) if final_answer else None
 
+        # Return the final round's result with all rounds' data
+        last_round = all_round_data[-1]
         return {
             "problem": problem,
-            "branches": branch_outputs,
-            "branch_answers": branch_answers,
-            "compact_notes": compact_notes,
-            "synthesis": synth_output,
-            "final_answer": final_answer,
+            "branches": last_round["branches"],
+            "branch_answers": last_round["branch_answers"],
+            "compact_notes": last_round["compact_notes"],
+            "synthesis": last_round["synthesis"],
+            "final_answer": last_round["final_answer"],
+            "num_rounds": num_rounds,
+            "all_rounds": all_round_data if num_rounds > 1 else None,
         }
