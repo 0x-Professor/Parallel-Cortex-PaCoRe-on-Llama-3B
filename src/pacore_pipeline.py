@@ -202,13 +202,65 @@ class PaCoRePipeline:
         return outputs
 
     @torch.no_grad()
-    def run(self, problem: str) -> Dict[str, Any]:
+    def run(self, problem: str, num_rounds: int = 1, self_consistency_k: int = 1) -> Dict[str, Any]:
+        """Run PaCoRe inference with optional multi-round refinement and self-consistency.
+        
+        Args:
+            problem: The problem to solve.
+            num_rounds: Number of refinement rounds (default 1). More rounds = better accuracy.
+            self_consistency_k: Number of independent runs for self-consistency voting (default 1).
+        
+        Returns:
+            Dict with branches, synthesis, final_answer, and metadata.
+        """
         cfg = self.config.prompt
 
         if cfg.branches < 1:
             raise ValueError("prompt.branches must be >= 1")
 
-        branch_prompts = [build_branch_prompt(problem) for _ in range(cfg.branches)]
+        # Self-consistency: run multiple independent attempts and vote
+        if self_consistency_k > 1:
+            all_answers: List[str] = []
+            all_results: List[Dict[str, Any]] = []
+            for _ in range(self_consistency_k):
+                result = self._run_single(problem, num_rounds)
+                all_results.append(result)
+                if result["final_answer"]:
+                    all_answers.append(str(result["final_answer"]).strip())
+            
+            # Majority vote across all attempts
+            if all_answers:
+                counts: Dict[str, int] = {}
+                for ans in all_answers:
+                    counts[ans] = counts.get(ans, 0) + 1
+                best_answer = max(counts.items(), key=lambda kv: kv[1])[0]
+                vote_confidence = counts[best_answer] / len(all_answers)
+            else:
+                best_answer = all_results[0]["final_answer"] if all_results else None
+                vote_confidence = 0.0
+            
+            return {
+                "problem": problem,
+                "final_answer": best_answer,
+                "vote_confidence": vote_confidence,
+                "num_attempts": self_consistency_k,
+                "all_answers": all_answers,
+                "detailed_results": all_results,
+            }
+        
+        return self._run_single(problem, num_rounds)
+    
+    @torch.no_grad()
+    def _run_single(self, problem: str, num_rounds: int = 1) -> Dict[str, Any]:
+        """Single run of PaCoRe with optional multi-round refinement."""
+        cfg = self.config.prompt
+        prior_answer: Optional[str] = None
+        
+        for round_num in range(1, num_rounds + 1):
+            branch_prompts = [
+                build_branch_prompt(problem, round_num=round_num, prior_answer=prior_answer)
+                for _ in range(cfg.branches)
+            ]
         branch_outputs = self._generate(
             branch_prompts,
             cfg.branch_tokens,
