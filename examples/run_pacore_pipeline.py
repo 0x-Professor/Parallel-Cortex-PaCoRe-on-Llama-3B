@@ -41,9 +41,10 @@ def parse_args() -> argparse.Namespace:
         help="Allow loading model code from the Hub (needed for some architectures).",
     )
     # Defaults chosen to complete in a reasonable time on CPU.
-    parser.add_argument("--branches", type=int, default=2)
+    # Use 1 branch by default so the demo can finish quickly without GPU.
+    parser.add_argument("--branches", type=int, default=1)
     parser.add_argument("--rounds", type=int, default=1)
-    parser.add_argument("--branch_tokens", type=int, default=96)
+    parser.add_argument("--branch_tokens", type=int, default=64)
     parser.add_argument("--compact_tokens", type=int, default=64)
     parser.add_argument("--synth_tokens", type=int, default=96)
     return parser.parse_args()
@@ -57,6 +58,9 @@ def main():
         compact_tokens=args.compact_tokens,
         synthesis_tokens=args.synth_tokens,
         rounds=args.rounds,
+        # Greedy decoding is much faster than sampling on CPU.
+        temperature_branch=0.0,
+        temperature_synthesis=0.0,
     )
     pipe_cfg = PaCoRePipelineConfig(
         model_name=args.model,

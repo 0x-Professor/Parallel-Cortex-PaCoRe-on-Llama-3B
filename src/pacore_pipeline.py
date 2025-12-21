@@ -182,6 +182,9 @@ class PaCoRePipeline:
     def run(self, problem: str) -> Dict[str, Any]:
         cfg = self.config.prompt
 
+        if cfg.branches < 1:
+            raise ValueError("prompt.branches must be >= 1")
+
         branch_prompts = [build_branch_prompt(problem) for _ in range(cfg.branches)]
         branch_outputs = self._generate(
             branch_prompts,
@@ -190,6 +193,22 @@ class PaCoRePipeline:
             stop_regex=r"FINAL[\s_]*INTERMEDIATE[\s_]*ANSWER\s*:\s*\S",
         )
         branch_answers = [parse_intermediate_answer(txt) for txt in branch_outputs]
+
+        # Fast path: with a single branch, compaction + synthesis adds latency without
+        # improving quality in most demo cases. Return the branch's tagged answer.
+        if cfg.branches == 1:
+            final_answer = branch_answers[0] or parse_final_answer(branch_outputs[0])
+            synthesis = branch_outputs[0]
+            if final_answer is None:
+                final_answer = synthesis.strip() or None
+            return {
+                "problem": problem,
+                "branches": branch_outputs,
+                "branch_answers": branch_answers,
+                "compact_notes": [],
+                "synthesis": synthesis,
+                "final_answer": final_answer,
+            }
 
         compact_prompts = [build_compaction_prompt(txt, cfg.compact_tokens) for txt in branch_outputs]
         compact_notes = self._generate(compact_prompts, cfg.compact_tokens, temperature=0.3)
