@@ -63,7 +63,10 @@ class PaCoRePipelineConfig:
 class PaCoRePipeline:
     """Runs the PaCoRe parallel reasoning protocol for inference."""
 
-    def __init__(self, config: PaCoRePipelineConfig):
+    def __init__(self, config: Optional[PaCoRePipelineConfig] = None):
+        """Initialize pipeline with optional config (uses defaults if None)."""
+        if config is None:
+            config = PaCoRePipelineConfig()
         self.config = config
         device = _resolve_device(config.device)
         if device == "cuda":
