@@ -31,6 +31,21 @@ def _default_device() -> str:
     return "cpu"
 
 
+def _normalize_device(device: Optional[str]) -> str:
+    if not device:
+        return "auto"
+    return device.strip().lower()
+
+
+def _resolve_device(device: Optional[str]) -> str:
+    dev = _normalize_device(device)
+    if dev == "auto":
+        return _default_device()
+    if dev in {"cpu", "cuda", "mps"}:
+        return dev
+    raise ValueError(f"Unsupported device '{device}'. Use one of: auto, cpu, cuda, mps")
+
+
 @dataclass
 class PaCoRePipelineConfig:
     model_name: str = "meta-llama/Llama-3.2-3B-Instruct"
@@ -39,6 +54,9 @@ class PaCoRePipelineConfig:
     hf_token: Optional[str] = None
     prompt: PaCoRePromptConfig = field(default_factory=PaCoRePromptConfig)
     max_batch: int = 8  # how many prompts to batch at once
+    # Regex-based stopping is expensive because it requires decoding every step.
+    # Keep it off by default; rely on max_new_tokens + tagged parsing.
+    regex_stopping: bool = False
 
 
 class PaCoRePipeline:
@@ -46,8 +64,13 @@ class PaCoRePipeline:
 
     def __init__(self, config: PaCoRePipelineConfig):
         self.config = config
-        model_dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
-        device = config.device or _default_device()
+        device = _resolve_device(config.device)
+        if device == "cuda":
+            model_dtype = torch.bfloat16
+        elif device == "mps":
+            model_dtype = torch.float16
+        else:
+            model_dtype = torch.float32
 
         # Prefer an explicit token (config) and then fall back to environment variables.
         # NOTE: `huggingface_hub.HfFolder.get_token()` only checks cached CLI logins; it
@@ -70,10 +93,12 @@ class PaCoRePipeline:
         self.model = AutoModelForCausalLM.from_pretrained(
             config.model_name,
             torch_dtype=model_dtype,
-            device_map="auto" if device != "cpu" else None,
+            device_map="auto" if device == "cuda" else None,
             trust_remote_code=config.trust_remote_code,
             token=hf_token,
         )
+        if device in {"cpu", "mps"}:
+            self.model.to(device)
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
@@ -129,16 +154,18 @@ class PaCoRePipeline:
             input_lengths = tokenized["attention_mask"].sum(dim=1)
 
             stopping: Optional[StoppingCriteriaList] = None
-            if stop_regex:
-                stopping = StoppingCriteriaList([
-                    _StopOnCompletionRegex(self.tokenizer, input_lengths, stop_regex)
-                ])
+            if stop_regex and bool(self.config.regex_stopping):
+                stopping = StoppingCriteriaList(
+                    [_StopOnCompletionRegex(self.tokenizer, input_lengths, stop_regex)]
+                )
+
+            do_sample = temperature is not None and float(temperature) > 0.0
 
             generated = self.model.generate(
                 **tokenized,
                 max_new_tokens=max_new_tokens,
-                do_sample=True,
-                temperature=temperature,
+                do_sample=do_sample,
+                temperature=(float(temperature) if do_sample else None),
                 top_p=self.config.prompt.top_p,
                 eos_token_id=self.tokenizer.eos_token_id,
                 pad_token_id=self.tokenizer.pad_token_id,

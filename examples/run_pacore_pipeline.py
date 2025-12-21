@@ -31,15 +31,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("problem", nargs="?", default="Prove that the sum of two even numbers is even.")
     parser.add_argument("--model", dest="model", default="meta-llama/Llama-3.2-3B-Instruct")
     parser.add_argument(
+        "--device",
+        default="auto",
+        help="Where to run the model: auto|cpu|cuda|mps (auto picks best available).",
+    )
+    parser.add_argument(
         "--trust_remote_code",
         action="store_true",
         help="Allow loading model code from the Hub (needed for some architectures).",
     )
-    parser.add_argument("--branches", type=int, default=4)
+    # Defaults chosen to complete in a reasonable time on CPU.
+    parser.add_argument("--branches", type=int, default=2)
     parser.add_argument("--rounds", type=int, default=1)
-    parser.add_argument("--branch_tokens", type=int, default=192)
-    parser.add_argument("--compact_tokens", type=int, default=96)
-    parser.add_argument("--synth_tokens", type=int, default=192)
+    parser.add_argument("--branch_tokens", type=int, default=96)
+    parser.add_argument("--compact_tokens", type=int, default=64)
+    parser.add_argument("--synth_tokens", type=int, default=96)
     return parser.parse_args()
 
 
@@ -56,6 +62,7 @@ def main():
         model_name=args.model,
         prompt=prompt_cfg,
         trust_remote_code=bool(args.trust_remote_code),
+        device=args.device,
     )
     pipeline = PaCoRePipeline(pipe_cfg)
 
