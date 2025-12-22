@@ -98,7 +98,7 @@ result = pipeline.run("Complex math problem...", num_rounds=2)
 result = pipeline.run("Tricky problem...", self_consistency_k=5)
 print(f"Answer: {result['final_answer']}, Confidence: {result['vote_confidence']}")
 ```
-
+![alt text](image-4.png)
 ## Hugging Face Access (Llama Models)
 
 Some Meta Llama repositories are gated on the Hugging Face Hub.
