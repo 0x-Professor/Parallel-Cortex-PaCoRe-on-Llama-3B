@@ -42,7 +42,7 @@ This project demonstrates how parallel reasoning branches, multi-round refinemen
 - **Synthesis** with consensus fallback
 - **Multi-round refinement** (`num_rounds` parameter)
 - **Self-consistency voting** (`self_consistency_k` parameter)
-![alt text](image-2.png)
+![alt text](image-3.png)
 
 ## Setup (Windows)
 
