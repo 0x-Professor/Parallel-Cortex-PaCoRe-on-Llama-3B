@@ -3,6 +3,7 @@
 A **competition-grade** implementation of Parallel Cortex Reasoning for enhanced LLM inference.
 
 This project demonstrates how parallel reasoning branches, multi-round refinement, and self-consistency voting can dramatically improve reasoning accuracy on a 3B parameter model.
+![alt text](image.png)
 
 ## Key Features
 
@@ -20,6 +21,7 @@ This project demonstrates how parallel reasoning branches, multi-round refinemen
 - Multi-metric scoring (accuracy, latency, consistency)
 - Configuration comparison framework
 - Detailed per-problem analysis
+![alt text](image-1.png)
 
 ## What's Implemented
 
@@ -40,6 +42,7 @@ This project demonstrates how parallel reasoning branches, multi-round refinemen
 - **Synthesis** with consensus fallback
 - **Multi-round refinement** (`num_rounds` parameter)
 - **Self-consistency voting** (`self_consistency_k` parameter)
+![alt text](image-2.png)
 
 ## Setup (Windows)
 
