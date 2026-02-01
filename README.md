@@ -1,4 +1,4 @@
-# PaCoRe (Parallel Collaborative Reasoning) - PDC Project
+# PaCoRe (Parallel Collaborative Reasoning)
 
 A **competition-grade** implementation of Parallel Cortex Reasoning for enhanced LLM inference.
 
@@ -149,6 +149,3 @@ The PaCoRe approach can significantly improve reasoning accuracy:
 
 For competition-grade results, use `num_rounds=2, self_consistency_k=3` or higher.
 
-## License
-
-This project is for educational/research purposes as part of a PDC course submission.
